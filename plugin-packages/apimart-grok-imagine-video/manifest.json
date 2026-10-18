@@ -1,0 +1,426 @@
+{
+  "apiVersion": "yingce.plugin/v2",
+  "id": "apimart-grok-imagine-video",
+  "name": "APIMart Grok Imagine 异步视频",
+  "version": "1.0.1",
+  "author": "影策",
+  "description": "Grok Imagine 1.5 文生视频、参考图生视频与异步任务轮询。",
+  "permissions": [
+    "generation.run",
+    "media.read"
+  ],
+  "configuration": {
+    "fields": [
+      {
+        "name": "apiKey",
+        "type": "secret",
+        "label": "API Key",
+        "required": true
+      }
+    ]
+  },
+  "contributes": {
+    "providers": [
+      {
+        "id": "apimart-grok-imagine-video",
+        "label": "APIMart Grok Imagine Video",
+        "capabilities": [
+          "video"
+        ],
+        "scopes": [
+          "admin.system-channel",
+          "user.custom-channel",
+          "canvas",
+          "creation",
+          "agent"
+        ],
+        "baseUrl": "https://api.apimart.ai",
+        "requiresPublicMediaUrls": true,
+        "auth": {
+          "type": "bearer",
+          "field": "apiKey"
+        },
+        "parameters": [
+          {
+            "name": "model",
+            "type": "string",
+            "required": true,
+            "mapping": "model",
+            "description": "渠道配置的上游模型名称，原样发送，不限制固定名称。"
+          },
+          {
+            "name": "prompt",
+            "type": "string",
+            "required": true,
+            "mapping": "prompt",
+            "description": "视频内容描述。"
+          },
+          {
+            "name": "images",
+            "type": "media[]",
+            "required": false,
+            "mapping": "image_urls",
+            "description": "最多 7 张公网参考图，按 order 排序，不支持 Base64 或尾帧语义。"
+          },
+          {
+            "name": "duration",
+            "type": "integer",
+            "required": false,
+            "mapping": "duration",
+            "description": "6–15 秒，默认 6。"
+          },
+          {
+            "name": "aspectRatio",
+            "type": "string",
+            "required": false,
+            "mapping": "size",
+            "description": "16:9、9:16、1:1、3:2、2:3，默认 16:9。"
+          },
+          {
+            "name": "resolution",
+            "type": "string",
+            "required": false,
+            "mapping": "resolution",
+            "description": "480p 或 720p，默认 480p。"
+          },
+          {
+            "name": "providerOptions",
+            "type": "object",
+            "required": false,
+            "mapping": "nsfw_check",
+            "description": "apimart-grok-imagine-video 命名空间中的可选布尔值。"
+          }
+        ],
+        "validations": [
+          {
+            "assert": {
+              "$and": [
+                {
+                  "$gte": [
+                    {
+                      "$if": {
+                        "condition": {
+                          "$eq": [
+                            {
+                              "$ref": "request.duration"
+                            },
+                            0
+                          ]
+                        },
+                        "then": 6,
+                        "else": {
+                          "$ref": "request.duration"
+                        }
+                      }
+                    },
+                    6
+                  ]
+                },
+                {
+                  "$lte": [
+                    {
+                      "$if": {
+                        "condition": {
+                          "$eq": [
+                            {
+                              "$ref": "request.duration"
+                            },
+                            0
+                          ]
+                        },
+                        "then": 6,
+                        "else": {
+                          "$ref": "request.duration"
+                        }
+                      }
+                    },
+                    15
+                  ]
+                }
+              ]
+            },
+            "message": "APIMart Grok 视频时长必须为 6–15 秒"
+          },
+          {
+            "assert": {
+              "$in": [
+                {
+                  "$coalesce": [
+                    {
+                      "$ref": "request.aspectRatio"
+                    },
+                    "16:9"
+                  ]
+                },
+                [
+                  "16:9",
+                  "9:16",
+                  "1:1",
+                  "3:2",
+                  "2:3"
+                ]
+              ]
+            },
+            "message": "APIMart Grok 视频仅支持 16:9、9:16、1:1、3:2、2:3"
+          },
+          {
+            "assert": {
+              "$in": [
+                {
+                  "$coalesce": [
+                    {
+                      "$ref": "request.resolution"
+                    },
+                    "480p"
+                  ]
+                },
+                [
+                  "480p",
+                  "720p"
+                ]
+              ]
+            },
+            "message": "APIMart Grok 视频仅支持 480p 或 720p"
+          },
+          {
+            "assert": {
+              "$lte": [
+                {
+                  "$len": {
+                    "$ref": "request.images"
+                  }
+                },
+                7
+              ]
+            },
+            "message": "APIMart Grok 视频最多支持 7 张参考图"
+          },
+          {
+            "assert": {
+              "$eq": [
+                {
+                  "$len": {
+                    "$filter": {
+                      "from": {
+                        "$ref": "request.images"
+                      },
+                      "as": "media",
+                      "where": {
+                        "$or": [
+                          {
+                            "$not": {
+                              "$in": [
+                                {
+                                  "$first": {
+                                    "$split": [
+                                      {
+                                        "$ref": "media.url"
+                                      },
+                                      ":"
+                                    ]
+                                  }
+                                },
+                                [
+                                  "https",
+                                  "http"
+                                ]
+                              ]
+                            }
+                          },
+                          {
+                            "$eq": [
+                              {
+                                "$ref": "media.role"
+                              },
+                              "last_frame"
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                0
+              ]
+            },
+            "message": "参考图必须使用公网 HTTP(S) URL；此接口不支持 Base64 或独立尾帧"
+          },
+          {
+            "assert": {
+              "$and": [
+                {
+                  "$eq": [
+                    {
+                      "$len": {
+                        "$ref": "request.videos"
+                      }
+                    },
+                    0
+                  ]
+                },
+                {
+                  "$eq": [
+                    {
+                      "$len": {
+                        "$ref": "request.audios"
+                      }
+                    },
+                    0
+                  ]
+                }
+              ]
+            },
+            "message": "此 Grok 接口不支持参考视频或参考音频"
+          }
+        ],
+        "create": {
+          "method": "POST",
+          "path": "/v1/videos/generations",
+          "originPath": true,
+          "contentType": "application/json",
+          "body": {
+            "model": {
+              "$ref": "request.model"
+            },
+            "prompt": {
+              "$ref": "request.prompt"
+            },
+            "size": {
+              "$coalesce": [
+                {
+                  "$ref": "request.aspectRatio"
+                },
+                "16:9"
+              ]
+            },
+            "duration": {
+              "$if": {
+                "condition": {
+                  "$eq": [
+                    {
+                      "$ref": "request.duration"
+                    },
+                    0
+                  ]
+                },
+                "then": 6,
+                "else": {
+                  "$ref": "request.duration"
+                }
+              }
+            },
+            "resolution": {
+              "$coalesce": [
+                {
+                  "$ref": "request.resolution"
+                },
+                "480p"
+              ]
+            },
+            "image_urls": {
+              "$omitEmpty": {
+                "$map": {
+                  "from": {
+                    "$sortByOrder": {
+                      "$ref": "request.images"
+                    }
+                  },
+                  "as": "media",
+                  "in": {
+                    "$ref": "media.url"
+                  }
+                }
+              }
+            },
+            "nsfw_check": {
+              "$omitEmpty": {
+                "$ref": "request.providerOptions.apimart-grok-imagine-video.nsfw_check"
+              }
+            }
+          }
+        },
+        "poll": {
+          "method": "GET",
+          "path": "/v1/tasks/{{taskId}}",
+          "originPath": true,
+          "query": {
+            "language": "zh"
+          }
+        },
+        "response": {
+          "taskId": {
+            "$coalesce": [
+              {
+                "$ref": "response.data.0.task_id"
+              },
+              {
+                "$ref": "response.data.id"
+              },
+              {
+                "$ref": "taskId"
+              }
+            ]
+          },
+          "status": {
+            "$if": {
+              "condition": {
+                "$and": [
+                  {
+                    "$ref": "response.code"
+                  },
+                  {
+                    "$ne": [
+                      {
+                        "$ref": "response.code"
+                      },
+                      200
+                    ]
+                  }
+                ]
+              },
+              "then": "failed",
+              "else": {
+                "$coalesce": [
+                  {
+                    "$ref": "response.data.0.status"
+                  },
+                  {
+                    "$ref": "response.data.status"
+                  }
+                ]
+              }
+            }
+          },
+          "messagePaths": [
+            "data.error.message",
+            "error.message",
+            "message",
+            "msg"
+          ],
+          "errorPaths": [
+            "error.code",
+            "data.error.code"
+          ],
+          "resultKind": "video",
+          "resultEphemeral": true,
+          "videos": {
+            "$map": {
+              "from": {
+                "$ref": "response.data.result.videos"
+              },
+              "as": "video",
+              "in": {
+                "url": {
+                  "$first": {
+                    "$ref": "video.url"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "documentation": "# APIMart Grok Imagine 异步视频插件\n\n在影策「插件」页面导入 `apimart-grok-imagine-video.yingce-plugin` 并启用，在系统渠道或自定义渠道选择此协议，配置 API Key，模型填写渠道提供的模型名称（例如 `grok-imagine-1.5-video-ext`），插件原样发送。默认地址 `https://api.apimart.ai`。\n\n支持文生视频、最多 7 张公网参考图、6–15 秒和 480p/720p。任务由宿主异步轮询并下载持久化。参考图不支持 Base64；本地图片须先经宿主转换为公网可访问资源。\n\n---\n\n# 接口定义\n\n来源：[Grok Imagine 视频生成](https://docs.apib.ai/cn/api-reference/videos/grok-imagine/generation.md)、[任务查询](https://docs.apib.ai/cn/api-reference/tasks/status.md)。官方示例实际服务域名为 api.apimart.ai。\n\n## 请求字段\n\n- `apiKey`：必填，Bearer 请求头鉴权。\n- `model`：渠道配置的上游模型名称，原样发送，不限制固定名称；`prompt`：视频描述。\n- `duration`：整数 6–15 秒，未提供时默认 6。\n- `aspectRatio` → `size`：16:9 / 9:16 / 1:1 / 3:2 / 2:3，默认 16:9。提供参考图后上游自动匹配参考图宽高比。\n- `resolution`：480p / 720p，默认 480p。\n- `images` → `image_urls`：最多 7 张，按 order 排序，只发送公网 HTTP(S) URL，不使用 dataUrl；网络可达性由上游确认，宿主负责资源准备和 SSRF 安全边界。拒绝独立 last_frame 输入，不把参考图列表宣称为首尾帧协议。\n- `providerOptions.apimart-grok-imagine-video.nsfw_check`：可选布尔值，省略时采用上游默认 false。\n- 不支持参考视频、参考音频；不发送未在文档声明的 generate_audio、水印或数量字段。\n\n## 响应与生命周期\n\n创建使用 `POST /v1/videos/generations`，读取 `data[0].task_id` 和 submitted 状态。查询使用 `GET /v1/tasks/{task_id}?language=zh`，读取 data.id、data.status：pending/submitted 为待处理、processing 为处理中、completed 为成功、failed 为失败、cancelled 为已取消。\n\n上游业务 code=200 为成功，非 200 映射失败，错误信息优先读取 data.error.message、error.message。视频取自 `data.result.videos[].url`，接受 URL 字符串或 URL 数组（每个视频对象取第一个 URL）；查询文档只声明 videos 为对象数组，未提供视频对象完整示例，此字段仍需真实任务确认。临时视频 URL 标记 ephemeral，交给宿主下载持久化。\n\n文档未提供取消端点，不声明远端取消能力。停止本地等待不代表上游停止生成或免计费。\n\n## Manifest 完整接口定义\n\n<!-- YINGCE_MANIFEST_CONTRACT_START -->\n```json\n{\n  \"apiVersion\": \"yingce.plugin/v2\",\n  \"id\": \"apimart-grok-imagine-video\",\n  \"name\": \"APIMart Grok Imagine 异步视频\",\n  \"version\": \"1.0.1\",\n  \"author\": \"影策\",\n  \"description\": \"Grok Imagine 1.5 文生视频、参考图生视频与异步任务轮询。\",\n  \"permissions\": [\n    \"generation.run\",\n    \"media.read\"\n  ],\n  \"configuration\": {\n    \"fields\": [\n      {\n        \"name\": \"apiKey\",\n        \"type\": \"secret\",\n        \"label\": \"API Key\",\n        \"required\": true\n      }\n    ]\n  },\n  \"contributes\": {\n    \"providers\": [\n      {\n        \"id\": \"apimart-grok-imagine-video\",\n        \"label\": \"APIMart Grok Imagine Video\",\n        \"capabilities\": [\n          \"video\"\n        ],\n        \"scopes\": [\n          \"admin.system-channel\",\n          \"user.custom-channel\",\n          \"canvas\",\n          \"creation\",\n          \"agent\"\n        ],\n        \"baseUrl\": \"https://api.apimart.ai\",\n        \"requiresPublicMediaUrls\": true,\n        \"auth\": {\n          \"type\": \"bearer\",\n          \"field\": \"apiKey\"\n        },\n        \"parameters\": [\n          {\n            \"name\": \"model\",\n            \"type\": \"string\",\n            \"required\": true,\n            \"mapping\": \"model\",\n            \"description\": \"渠道配置的上游模型名称，原样发送，不限制固定名称。\"\n          },\n          {\n            \"name\": \"prompt\",\n            \"type\": \"string\",\n            \"required\": true,\n            \"mapping\": \"prompt\",\n            \"description\": \"视频内容描述。\"\n          },\n          {\n            \"name\": \"images\",\n            \"type\": \"media[]\",\n            \"required\": false,\n            \"mapping\": \"image_urls\",\n            \"description\": \"最多 7 张公网参考图，按 order 排序，不支持 Base64 或尾帧语义。\"\n          },\n          {\n            \"name\": \"duration\",\n            \"type\": \"integer\",\n            \"required\": false,\n            \"mapping\": \"duration\",\n            \"description\": \"6–15 秒，默认 6。\"\n          },\n          {\n            \"name\": \"aspectRatio\",\n            \"type\": \"string\",\n            \"required\": false,\n            \"mapping\": \"size\",\n            \"description\": \"16:9、9:16、1:1、3:2、2:3，默认 16:9。\"\n          },\n          {\n            \"name\": \"resolution\",\n            \"type\": \"string\",\n            \"required\": false,\n            \"mapping\": \"resolution\",\n            \"description\": \"480p 或 720p，默认 480p。\"\n          },\n          {\n            \"name\": \"providerOptions\",\n            \"type\": \"object\",\n            \"required\": false,\n            \"mapping\": \"nsfw_check\",\n            \"description\": \"apimart-grok-imagine-video 命名空间中的可选布尔值。\"\n          }\n        ],\n        \"validations\": [\n          {\n            \"assert\": {\n              \"$and\": [\n                {\n                  \"$gte\": [\n                    {\n                      \"$if\": {\n                        \"condition\": {\n                          \"$eq\": [\n                            {\n                              \"$ref\": \"request.duration\"\n                            },\n                            0\n                          ]\n                        },\n                        \"then\": 6,\n                        \"else\": {\n                          \"$ref\": \"request.duration\"\n                        }\n                      }\n                    },\n                    6\n                  ]\n                },\n                {\n                  \"$lte\": [\n                    {\n                      \"$if\": {\n                        \"condition\": {\n                          \"$eq\": [\n                            {\n                              \"$ref\": \"request.duration\"\n                            },\n                            0\n                          ]\n                        },\n                        \"then\": 6,\n                        \"else\": {\n                          \"$ref\": \"request.duration\"\n                        }\n                      }\n                    },\n                    15\n                  ]\n                }\n              ]\n            },\n            \"message\": \"APIMart Grok 视频时长必须为 6–15 秒\"\n          },\n          {\n            \"assert\": {\n              \"$in\": [\n                {\n                  \"$coalesce\": [\n                    {\n                      \"$ref\": \"request.aspectRatio\"\n                    },\n                    \"16:9\"\n                  ]\n                },\n                [\n                  \"16:9\",\n                  \"9:16\",\n                  \"1:1\",\n                  \"3:2\",\n                  \"2:3\"\n                ]\n              ]\n            },\n            \"message\": \"APIMart Grok 视频仅支持 16:9、9:16、1:1、3:2、2:3\"\n          },\n          {\n            \"assert\": {\n              \"$in\": [\n                {\n                  \"$coalesce\": [\n                    {\n                      \"$ref\": \"request.resolution\"\n                    },\n                    \"480p\"\n                  ]\n                },\n                [\n                  \"480p\",\n                  \"720p\"\n                ]\n              ]\n            },\n            \"message\": \"APIMart Grok 视频仅支持 480p 或 720p\"\n          },\n          {\n            \"assert\": {\n              \"$lte\": [\n                {\n                  \"$len\": {\n                    \"$ref\": \"request.images\"\n                  }\n                },\n                7\n              ]\n            },\n            \"message\": \"APIMart Grok 视频最多支持 7 张参考图\"\n          },\n          {\n            \"assert\": {\n              \"$eq\": [\n                {\n                  \"$len\": {\n                    \"$filter\": {\n                      \"from\": {\n                        \"$ref\": \"request.images\"\n                      },\n                      \"as\": \"media\",\n                      \"where\": {\n                        \"$or\": [\n                          {\n                            \"$not\": {\n                              \"$in\": [\n                                {\n                                  \"$first\": {\n                                    \"$split\": [\n                                      {\n                                        \"$ref\": \"media.url\"\n                                      },\n                                      \":\"\n                                    ]\n                                  }\n                                },\n                                [\n                                  \"https\",\n                                  \"http\"\n                                ]\n                              ]\n                            }\n                          },\n                          {\n                            \"$eq\": [\n                              {\n                                \"$ref\": \"media.role\"\n                              },\n                              \"last_frame\"\n                            ]\n                          }\n                        ]\n                      }\n                    }\n                  }\n                },\n                0\n              ]\n            },\n            \"message\": \"参考图必须使用公网 HTTP(S) URL；此接口不支持 Base64 或独立尾帧\"\n          },\n          {\n            \"assert\": {\n              \"$and\": [\n                {\n                  \"$eq\": [\n                    {\n                      \"$len\": {\n                        \"$ref\": \"request.videos\"\n                      }\n                    },\n                    0\n                  ]\n                },\n                {\n                  \"$eq\": [\n                    {\n                      \"$len\": {\n                        \"$ref\": \"request.audios\"\n                      }\n                    },\n                    0\n                  ]\n                }\n              ]\n            },\n            \"message\": \"此 Grok 接口不支持参考视频或参考音频\"\n          }\n        ],\n        \"create\": {\n          \"method\": \"POST\",\n          \"path\": \"/v1/videos/generations\",\n          \"originPath\": true,\n          \"contentType\": \"application/json\",\n          \"body\": {\n            \"model\": {\n              \"$ref\": \"request.model\"\n            },\n            \"prompt\": {\n              \"$ref\": \"request.prompt\"\n            },\n            \"size\": {\n              \"$coalesce\": [\n                {\n                  \"$ref\": \"request.aspectRatio\"\n                },\n                \"16:9\"\n              ]\n            },\n            \"duration\": {\n              \"$if\": {\n                \"condition\": {\n                  \"$eq\": [\n                    {\n                      \"$ref\": \"request.duration\"\n                    },\n                    0\n                  ]\n                },\n                \"then\": 6,\n                \"else\": {\n                  \"$ref\": \"request.duration\"\n                }\n              }\n            },\n            \"resolution\": {\n              \"$coalesce\": [\n                {\n                  \"$ref\": \"request.resolution\"\n                },\n                \"480p\"\n              ]\n            },\n            \"image_urls\": {\n              \"$omitEmpty\": {\n                \"$map\": {\n                  \"from\": {\n                    \"$sortByOrder\": {\n                      \"$ref\": \"request.images\"\n                    }\n                  },\n                  \"as\": \"media\",\n                  \"in\": {\n                    \"$ref\": \"media.url\"\n                  }\n                }\n              }\n            },\n            \"nsfw_check\": {\n              \"$omitEmpty\": {\n                \"$ref\": \"request.providerOptions.apimart-grok-imagine-video.nsfw_check\"\n              }\n            }\n          }\n        },\n        \"poll\": {\n          \"method\": \"GET\",\n          \"path\": \"/v1/tasks/{{taskId}}\",\n          \"originPath\": true,\n          \"query\": {\n            \"language\": \"zh\"\n          }\n        },\n        \"response\": {\n          \"taskId\": {\n            \"$coalesce\": [\n              {\n                \"$ref\": \"response.data.0.task_id\"\n              },\n              {\n                \"$ref\": \"response.data.id\"\n              },\n              {\n                \"$ref\": \"taskId\"\n              }\n            ]\n          },\n          \"status\": {\n            \"$if\": {\n              \"condition\": {\n                \"$and\": [\n                  {\n                    \"$ref\": \"response.code\"\n                  },\n                  {\n                    \"$ne\": [\n                      {\n                        \"$ref\": \"response.code\"\n                      },\n                      200\n                    ]\n                  }\n                ]\n              },\n              \"then\": \"failed\",\n              \"else\": {\n                \"$coalesce\": [\n                  {\n                    \"$ref\": \"response.data.0.status\"\n                  },\n                  {\n                    \"$ref\": \"response.data.status\"\n                  }\n                ]\n              }\n            }\n          },\n          \"messagePaths\": [\n            \"data.error.message\",\n            \"error.message\",\n            \"message\",\n            \"msg\"\n          ],\n          \"errorPaths\": [\n            \"error.code\",\n            \"data.error.code\"\n          ],\n          \"resultKind\": \"video\",\n          \"resultEphemeral\": true,\n          \"videos\": {\n            \"$map\": {\n              \"from\": {\n                \"$ref\": \"response.data.result.videos\"\n              },\n              \"as\": \"video\",\n              \"in\": {\n                \"url\": {\n                  \"$first\": {\n                    \"$ref\": \"video.url\"\n                  }\n                }\n              }\n            }\n          }\n        }\n      }\n    ]\n  },\n  \"documentation\": \"<当前插件的完整 documentation，由 README.md 与 docs/interface.md 拼接而成；为避免 JSON 递归，此处不重复展开正文。>\"\n}\n```\n<!-- YINGCE_MANIFEST_CONTRACT_END -->"
+}
