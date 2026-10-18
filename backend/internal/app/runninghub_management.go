@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -62,11 +64,19 @@ func (s *Service) FetchRunningHubAppInfo(ctx context.Context, req RunningHubWork
 	}
 	root := runningHubRootURL(config.BaseURL)
 	var response map[string]any
-	if err := s.runningHubJSON(ctx, config, root+"/api/webapp/apiCallDemo", map[string]any{
-		"apiKey":   runningHubAPIKey(config),
-		"webappId": webappID,
-	}, &response); err != nil {
+	// 此管理接口要求 GET query，不能复用任务接口的 POST JSON 协议。
+	query := url.Values{"apiKey": {runningHubAPIKey(config)}, "webappId": {webappID}}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, root+"/api/webapp/apiCallDemo?"+query.Encode(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("构建 RunningHub App 参数请求失败：%w", err)
+	}
+	request.Header.Set("Authorization", "Bearer "+runningHubAPIKey(config))
+	data, _, err := doBinary(request)
+	if err != nil {
 		return nil, fmt.Errorf("拉取 RunningHub App 参数失败：%w", err)
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("解析 RunningHub App 参数失败：%w", err)
 	}
 	if code, valid := runningHubPayloadCode(response); valid && code != 0 {
 		return nil, fmt.Errorf("拉取 RunningHub App 参数失败：%s", runningHubFailureMessage(response))

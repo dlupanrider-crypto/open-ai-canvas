@@ -5,6 +5,11 @@ description: 当前项目已实现功能的手工验证清单与未确认边界
 
 # 待测试
 
+## RunningHub AI App 参数拉取
+
+- 已修复：按 [RunningHub 接口文档](https://www.runninghub.cn/runninghub-api-doc-cn/api-425749011) 使用 GET `/api/webapp/apiCallDemo`，通过 query 传递 `apiKey`、`webappId`，并携带 Bearer 鉴权。请求仅由后端发往上游，前端仍使用本站 POST 接口，不在浏览器 URL 中放入密钥。
+- [ ] 升级后端后，在设置页使用真实 AI App 拉取参数，确认公开字段正确显示；本地协议测试不代表真实上游验收。
+
 ## 画布多窗口光标与实时通知
 
 - 已实现：同一账号同一画布的独立窗口会话、顶部居中的可展开设备入口、远端世界坐标光标与拖拽轮廓、退出清理、断线重连与状态补偿；服务端统一分配设备编号，各端名称和颜色一致，仅本机行显示“此窗口”。单窗口隐藏全部设备标记并停止采集，本机鼠标不附加标签。最终节点位置仍走既有 operations，不持久化 Presence。
