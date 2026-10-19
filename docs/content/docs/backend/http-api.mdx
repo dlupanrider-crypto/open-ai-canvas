@@ -5,6 +5,14 @@ description: 信封、错误码与 OpenAPI
 
 # HTTP API 合同
 
+## RunningHub App 参数与执行
+
+`POST /api/runninghub/app-info` 返回的 `fields` 保留上游 `nodeInfoList` 数组顺序，以 `nodeId + fieldName` 标识字段。`label` 采用参数说明，`fieldData` 转换为字段的 `options/min/max/step`；媒体字段中的示例文件名不属于上传文件枚举。App 未声明 `required` 时默认可选，不按首个图片、视频或音频槽位推断必填。
+
+App 已启用字段缺少可选输入时仍提交 `fieldValue`：媒体字段在拉取时记录 `emptyValue`，上游空字符串保持为空，默认值或文件选项声明 `None` 时使用该空槽标记，否则发送空字符串；不回填示例素材。明确必填仍拒绝缺失输入，关闭字段仍不覆盖上游默认值。独立配置的比例按字段值发送，不使用全局尺寸覆盖。Workflow 继续使用自身拓扑与字段覆盖规则。
+
+现有积分执行通道仍使用 `/task/openapi/ai-app/run` 和 `/task/openapi/outputs`；数字错误码严格解析，`RUNNING/QUEUED/SUCCESS/FAILED` 按状态处理，不能将非数字状态转换为成功码 `0`。提交返回任务 ID 且状态为运行中或排队中时视为已受理，继续轮询，不重新提交；明确业务失败仍返回错误。此处未切换到 App 文档页展示的 `/openapi/v2/run/ai-app/{id}` 通道。
+
 ## 画布实时会话
 
 `GET /api/canvas-projects/:id/realtime` 使用登录 Cookie 升级为 WebSocket，握手校验当前用户对画布的归属和请求 Origin。首帧 `welcome` 提供服务端分配的 `selfId` 和窗口 Presence；客户端发送 `presence`，服务端推送 `peer`、`leave`、`invalidate` 和 `heartbeat`。Presence 只含有界世界坐标和拖拽矩形，不包含密钥、编辑租约 token、画布正文或实际保存指令。

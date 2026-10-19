@@ -55,3 +55,18 @@ func TestFetchRunningHubAppInfoGETProtocol(t *testing.T) {
 		})
 	}
 }
+
+func TestFetchRunningHubAppRejectsMissingSchema(t *testing.T) {
+	allowLoopbackProviderTest(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":0,"data":{}}`))
+	}))
+	defer server.Close()
+	_, err := (&Service{}).FetchRunningHubAppInfo(context.Background(), RunningHubWorkflowFetchRequest{
+		BaseURL: server.URL, APIKey: "test-key", WebappID: "app-id",
+	})
+	if err == nil {
+		t.Fatal("missing schema must not replace saved fields with an empty list")
+	}
+}

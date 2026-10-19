@@ -21,6 +21,7 @@ type WorkflowField struct {
 	FieldName      string        `json:"fieldName"`
 	Value          interface{}   `json:"value,omitempty"`
 	FieldValue     interface{}   `json:"fieldValue,omitempty"`
+	EmptyValue     *string       `json:"emptyValue,omitempty"`
 	FieldType      string        `json:"fieldType,omitempty"`
 	Label          string        `json:"label,omitempty"`
 	Role           string        `json:"role,omitempty"`

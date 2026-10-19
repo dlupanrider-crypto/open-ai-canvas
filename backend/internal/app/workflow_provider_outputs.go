@@ -526,8 +526,8 @@ func runningHubCode(value interface{}) (int, bool) {
 		}
 		return code, true
 	case json.Number, string:
-		code := mapNumber(item)
-		return code, code >= 0
+		code, err := strconv.Atoi(strings.TrimSpace(fmt.Sprint(item)))
+		return code, err == nil && code >= 0
 	default:
 		return 0, false
 	}

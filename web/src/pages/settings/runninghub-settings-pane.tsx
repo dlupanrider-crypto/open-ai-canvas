@@ -133,7 +133,7 @@ export function RunningHubSettingsPane() {
                 workflowId: id,
                 webappId: kind === "app" ? result.webappId || id : undefined,
                 title: result.title || title.trim() || id,
-                fields: existing ? mergeWorkflowFieldMappings(existing.fields, result.fields, capability) : normalizeWorkflowFieldMappings(result.fields, capability),
+                fields: existing ? mergeWorkflowFieldMappings(existing.fields, result.fields, capability, kind) : normalizeWorkflowFieldMappings(result.fields, capability),
                 workflowJson: kind === "workflow" ? result.workflowJson || {} : undefined,
             };
             persistWorkflow(item, capability);
