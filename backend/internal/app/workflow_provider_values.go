@@ -150,7 +150,17 @@ func runningHubNodeInfoWithWorkflow(fields []WorkflowField, files map[string]str
 			if field.Required {
 				return nil, fmt.Errorf("工作流字段 %s 缺少值", firstNonEmptyString(field.ID, field.FieldName))
 			}
-			continue
+			if strings.TrimSpace(input.Config.WebappID) == "" {
+				continue
+			}
+			// 省略 App 媒体字段会沿用示例素材。保留 None 空槽约定，其余缺失素材显式清空。
+			value = ""
+			if configured, ok := firstNonNilWorkflowValue(field.FieldValue, field.Value).(string); ok && isWorkflowMediaSource(normalizeWorkflowFieldSource(field)) && strings.EqualFold(strings.TrimSpace(configured), "None") {
+				value = configured
+			}
+			if field.EmptyValue != nil && isWorkflowMediaSource(normalizeWorkflowFieldSource(field)) {
+				value = *field.EmptyValue
+			}
 		}
 		if err := validateRunningHubWorkflowFieldValue(field, value); err != nil {
 			return nil, err
@@ -309,7 +319,7 @@ func resolveWorkflowFieldValue(field WorkflowField, files map[string]string, inp
 	source := normalizeWorkflowFieldSource(field)
 	// 画布参数按 nodeId + fieldName 独立保存时 source 可能为空；枚举字段仍必须
 	// 使用工作流原始 options 的完整值，不能把用户界面上的比例简称直接发给 ComfyUI。
-	if source == "" && strings.EqualFold(strings.TrimSpace(field.FieldName), "aspect_ratio") {
+	if source == "" && strings.TrimSpace(input.Config.WebappID) == "" && strings.EqualFold(strings.TrimSpace(field.FieldName), "aspect_ratio") {
 		// 旧版前端只把比例写入 Config.Size，没有同步改写字段映射。此时不能
 		// 直接使用工作流保存的默认值，否则用户选择 9:16 会在提交前静默回到 1:1。
 		// 仅对非 1:1 的显式比例做回填，避免没有动态参数时覆盖工作流自己的 1:1 默认值。

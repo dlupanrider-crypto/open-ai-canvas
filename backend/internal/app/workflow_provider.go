@@ -170,12 +170,15 @@ func (s *Service) runRunningHubWorkflow(ctx context.Context, input canvasGenerat
 		return nil, fmt.Errorf("RunningHub 工作流提交失败：%w", err)
 	}
 	code, validCode := runningHubPayloadCode(submitted)
+	if explicitCode, ok := runningHubCode(submitted["code"]); ok && explicitCode != 0 {
+		code, validCode = explicitCode, true
+	}
 	if !validCode {
 		// 部分 RunningHub 兼容网关省略 code，但已经返回 taskId，按成功提交处理。
 		validCode = runningHubTaskID(submitted) != ""
 		code = 0
 	}
-	if !validCode || code != 0 {
+	if !validCode || (code != 0 && code != 804 && code != 813) {
 		return nil, fmt.Errorf("RunningHub 工作流提交失败：%s", runningHubWorkflowFailureMessage(submitted))
 	}
 	taskID := runningHubTaskID(submitted)

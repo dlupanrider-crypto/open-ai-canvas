@@ -186,13 +186,13 @@ export function WorkflowFieldMappingEditor({ fields, onChange, disabled = false 
                                             precision={0}
                                             value={source === "referenceImage" ? Math.max(1, Number(field.imageOrder) || 1) : Math.max(1, (Number(field.sourceIndex) || 0) + 1)}
                                             disabled={fieldDisabled}
-                                            onChange={(value) => updateField(index, source === "referenceImage" ? { imageOrder: Number(value) || 1 } : { sourceIndex: Math.max(0, (Number(value) || 1) - 1) })}
+                                            onChange={(value) => updateField(index, source === "referenceImage" ? { imageOrder: Number(value) || 1, sourceAutomatic: false } : { sourceIndex: Math.max(0, (Number(value) || 1) - 1), sourceAutomatic: false })}
                                         />
                                     </label>
                                 ) : null}
                                 <label className="flex items-center justify-between gap-3 text-xs text-foreground/60">
                                     缺失时阻止生成
-                                    <Switch checked={field.required === true} disabled={fieldDisabled || !source} onChange={(required) => updateField(index, { required })} />
+                                    <Switch checked={field.required === true} disabled={fieldDisabled || !source} onChange={(required) => updateField(index, { required, sourceAutomatic: false })} />
                                 </label>
                                 {fieldType === "NUMBER" ? (
                                     <label className="flex items-center justify-between gap-3 text-xs text-foreground/60">
@@ -258,6 +258,7 @@ function workflowEditorFieldType(field: WorkflowFieldMapping) {
         .trim()
         .toUpperCase();
     if (["FLOAT", "INT", "INTEGER"].includes(configured)) return "NUMBER";
+    if (["LIST", "COMBO"].includes(configured)) return "SELECT";
     if (fieldTypeOptions.some((item) => item.value === configured)) return configured;
     const value = field.fieldValue ?? field.value ?? field.default;
     if (typeof value === "boolean") return "BOOLEAN";

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -62,16 +64,27 @@ func (s *Service) FetchRunningHubAppInfo(ctx context.Context, req RunningHubWork
 	}
 	root := runningHubRootURL(config.BaseURL)
 	var response map[string]any
-	if err := s.runningHubJSON(ctx, config, root+"/api/webapp/apiCallDemo", map[string]any{
-		"apiKey":   runningHubAPIKey(config),
-		"webappId": webappID,
-	}, &response); err != nil {
+	// 此管理接口要求 GET query，不能复用任务接口的 POST JSON 协议。
+	query := url.Values{"apiKey": {runningHubAPIKey(config)}, "webappId": {webappID}}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, root+"/api/webapp/apiCallDemo?"+query.Encode(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("构建 RunningHub App 参数请求失败：%w", err)
+	}
+	request.Header.Set("Authorization", "Bearer "+runningHubAPIKey(config))
+	data, _, err := doBinary(request)
+	if err != nil {
 		return nil, fmt.Errorf("拉取 RunningHub App 参数失败：%w", err)
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("解析 RunningHub App 参数失败：%w", err)
 	}
 	if code, valid := runningHubPayloadCode(response); valid && code != 0 {
 		return nil, fmt.Errorf("拉取 RunningHub App 参数失败：%s", runningHubFailureMessage(response))
 	}
 	rawData, _ := response["data"].(map[string]any)
+	if _, ok := rawData["nodeInfoList"].([]any); !ok {
+		return nil, errors.New("RunningHub App 参数响应缺少 nodeInfoList")
+	}
 	result := map[string]any{"kind": "app", "webappId": webappID, "workflowId": webappID, "title": firstNonEmptyString(req.Title, webappID), "fields": []map[string]any{}, "raw": response}
 	if rawData != nil {
 		result["fields"] = normalizeManagementAppFields(rawData["nodeInfoList"], req.Capability)
@@ -121,9 +134,66 @@ func normalizeManagementAppFields(raw any, capability string) []map[string]any {
 		}
 		field["role"] = managementWorkflowFieldRole("", fieldName, fieldType, stringValue(field["source"]))
 		field["safeToOverride"] = true
+		if stringValue(field["label"]) == "" {
+			field["label"] = firstNonEmptyString(stringValue(field["description"]), stringValue(field["descriptionCn"]), fieldName)
+		}
+		// App 公开列表未声明必填时不能按媒体类型推断；缺少参考素材时仍需提交空槽位。
+		if _, exists := field["required"]; !exists {
+			field["required"] = false
+		}
+		applyManagementAppFieldData(field)
 		fields = append(fields, field)
 	}
 	return applyManagementFieldDefaults(fields, capability)
+}
+
+func applyManagementAppFieldData(field map[string]any) {
+	fieldType := strings.ToUpper(strings.TrimSpace(stringValue(field["fieldType"])))
+	media := fieldType == "IMAGE" || fieldType == "VIDEO" || fieldType == "AUDIO" || isWorkflowMediaSource(stringValue(field["source"]))
+	configured := stringValue(field["fieldValue"])
+	if media {
+		field["emptyValue"] = ""
+		if strings.EqualFold(strings.TrimSpace(configured), "None") {
+			field["emptyValue"] = configured
+		}
+	}
+	var schema []any
+	if err := json.Unmarshal([]byte(stringValue(field["fieldData"])), &schema); err != nil {
+		return
+	}
+	var options []any
+	for _, item := range schema {
+		if values, ok := item.([]any); ok {
+			options = values
+		}
+		if metadata, ok := item.(map[string]any); ok {
+			for _, key := range []string{"min", "max", "step"} {
+				if value, exists := metadata[key]; exists {
+					field[key] = value
+				}
+			}
+			if values, ok := metadata["options"].([]any); ok {
+				options = values
+			}
+			// 旧版 App 枚举以 index 为提交值，name/description 仅用于展示。
+			if value, exists := metadata["index"]; exists {
+				options = append(options, map[string]any{"value": value, "label": firstNonEmptyString(stringValue(metadata["description"]), stringValue(metadata["name"]), stringValue(value))})
+			}
+		}
+	}
+	if media && strings.TrimSpace(configured) != "" {
+		for _, option := range options {
+			if value, ok := option.(string); ok && strings.EqualFold(strings.TrimSpace(value), "None") {
+				field["emptyValue"] = value
+				break
+			}
+		}
+	}
+	if (fieldType == "LIST" || fieldType == "SELECT" || fieldType == "COMBO") && options != nil {
+		// 媒体 fieldData 中的示例文件列表不是上传文件的合法值枚举。
+		field["options"] = options
+		field["optionsSource"] = "workflow"
+	}
 }
 
 func runningHubManagementConfig(req RunningHubWorkflowFetchRequest) (providerConfig, error) {
@@ -242,14 +312,7 @@ func managementWorkflowFieldRole(classType string, fieldName string, fieldType s
 }
 
 func applyManagementFieldDefaults(fields []map[string]any, capability string) []map[string]any {
-	sort.SliceStable(fields, func(i, j int) bool {
-		leftNode := strings.TrimSpace(stringValue(fields[i]["nodeId"]))
-		rightNode := strings.TrimSpace(stringValue(fields[j]["nodeId"]))
-		if leftNode != rightNode {
-			return managementNodeIDLess(leftNode, rightNode)
-		}
-		return strings.TrimSpace(stringValue(fields[i]["fieldName"])) < strings.TrimSpace(stringValue(fields[j]["fieldName"]))
-	})
+	// Workflow 调用方已排序；App 必须保留公开 JSON 数组顺序，并按此分配媒体槽位。
 	imageOrder := 0
 	videoOrder := 0
 	audioOrder := 0

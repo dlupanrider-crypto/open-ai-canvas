@@ -9,6 +9,7 @@ export type WorkflowFieldMapping = {
     classType?: string;
     fieldName: string;
     fieldValue?: unknown;
+    emptyValue?: string;
     value?: unknown;
     default?: unknown;
     defaultValue?: unknown;
@@ -248,7 +249,7 @@ export function normalizeWorkflowFieldMappings(value: unknown, capability?: Runn
     });
 }
 
-export function mergeWorkflowFieldMappings(current: unknown, incoming: unknown, capability?: RunningHubCapability) {
+export function mergeWorkflowFieldMappings(current: unknown, incoming: unknown, capability?: RunningHubCapability, kind?: RunningHubWorkflowKind) {
     const previousFields = normalizeWorkflowFieldMappings(current, capability);
     const nextFields = normalizeWorkflowFieldMappings(incoming, capability);
     const previousByKey = new Map(previousFields.map((field) => [`${field.nodeId}::${field.fieldName}`, field]));
@@ -262,6 +263,12 @@ export function mergeWorkflowFieldMappings(current: unknown, incoming: unknown, 
         policyKeys.forEach((key) => {
             if (Object.prototype.hasOwnProperty.call(source, key)) target[key] = source[key];
         });
+        // App 重新拉取时按公开列表重建自动槽位；用户手动配置的来源和槽位继续保留。
+        if (kind === "app" && previous.sourceAutomatic && field.sourceAutomatic && previous.source === field.source) {
+            merged.sourceIndex = field.sourceIndex;
+            merged.imageOrder = field.imageOrder;
+            merged.required = field.required;
+        }
         // 字段类型、枚举和数值范围属于上游协议。只有本次拉取未返回时，才沿用本地补充配置。
         if (!field.fieldType && previous.fieldType) merged.fieldType = previous.fieldType;
         if (!field.options?.length && previous.options?.length) {
