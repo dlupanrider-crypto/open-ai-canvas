@@ -423,6 +423,22 @@ function buildCanvasResourceInputResolver(nodes: CanvasNodeData[], connections: 
         const source = nodeById.get(connection.fromNodeId);
         const target = nodeById.get(connection.toNodeId);
         if (!source || !target) continue;
+        if (source.type === CanvasNodeType.Script && connection.fromHandleId?.startsWith("row:")) {
+            const row = source.metadata?.storyboard?.rows.find((item) => `row:${item.id}` === connection.fromHandleId);
+            if (row) {
+                const ids = new Set([
+                    ...(source.metadata?.storyboard?.referenceNodeIds || []),
+                    ...(row.assetBindings || []).map((binding) => binding.nodeId),
+                    ...connections.filter((edge) => edge.toNodeId === source.id && edge.toHandleId === connection.fromHandleId).map((edge) => edge.fromNodeId),
+                ]);
+                const inputs = resourceInputsByTargetId.get(target.id) || [];
+                ids.forEach((id) => {
+                    const resource = nodeById.get(id);
+                    if (resource && resource.id !== target.id && isResourceNode(resource)) inputs.push(resource);
+                });
+                resourceInputsByTargetId.set(target.id, inputs);
+            }
+        }
         if (isResourceNode(source) && target.metadata?.batchRootId !== source.id) {
             const inputs = resourceInputsByTargetId.get(target.id) || [];
             inputs.push(source);

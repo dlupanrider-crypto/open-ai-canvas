@@ -203,6 +203,7 @@ function buildComposerGenerationContext(
         input: resolveGenerationMention(normalizedPrompt, match, slotInputByToken, nodeInputById, assetInputById),
     }));
     const selectedIds = new Set(mentions.flatMap(({ input }) => input ? [input.nodeId] : []));
+    inputs.filter((input) => input.alwaysIncludeText).forEach((input) => selectedIds.add(input.nodeId));
     if (autoIncludeWorkflowMedia) workflowMediaInputs.forEach((input) => {
         if (input.type !== "text") selectedIds.add(input.nodeId);
     });
@@ -332,11 +333,11 @@ function hasMentionBoundary(value: string, index: number) {
 }
 
 export function buildNodeGenerationInputs(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]): NodeGenerationInput[] {
-    return buildGenerationInputs(getGenerationResourceNodes(nodeId, nodes, connections), nodes, connections);
+    return mergeGenerationInputs(buildGenerationInputs(getGenerationResourceNodes(nodeId, nodes, connections), nodes, connections), getConnectedStoryboardRows(nodeId, nodes, connections));
 }
 
 function buildNodeMentionGenerationInputs(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]): NodeGenerationInput[] {
-    return buildGenerationInputs(getMentionResourceNodes(nodeId, nodes, connections), nodes, connections);
+    return mergeGenerationInputs(buildGenerationInputs(getMentionResourceNodes(nodeId, nodes, connections), nodes, connections), getConnectedStoryboardRows(nodeId, nodes, connections));
 }
 
 function buildGenerationInputs(resourceNodes: CanvasNodeData[], nodes: CanvasNodeData[], connections: CanvasConnection[]): NodeGenerationInput[] {
@@ -410,25 +411,12 @@ function getConnectedStoryboardRows(nodeId: string, nodes: CanvasNodeData[], con
         const inputId = `${scriptNode.id}:${connection.fromHandleId}`;
         if (seen.has(inputId)) return [];
         seen.add(inputId);
-        const characters = (row.characters || []).map((character) => [character.characterName, character.characterDescription].filter(Boolean).join("：")).filter(Boolean).join("、");
-        const text = [
-            `【分镜 ${row.shotNumber}】`,
-            `时长：${row.durationSeconds} 秒`,
-            row.plotDescription && `画面描述：${row.plotDescription}`,
-            row.dialogue && `台词/旁白：${row.dialogue}`,
-            characters && `角色：${characters}`,
-            row.shotSize && `景别：${row.shotSize}`,
-            row.emotion && `情绪：${row.emotion}`,
-            row.lightingAndAtmosphere && `光影氛围：${row.lightingAndAtmosphere}`,
-            row.audioEffects && `音效：${row.audioEffects}`,
-            row.camera && `镜头设计：${row.camera}`,
-            row.motion && `运镜：${row.motion}`,
-            row.timeBeats && `时间节拍：${row.timeBeats}`,
-            row.imageGenerationPrompt && `图片提示词：${row.imageGenerationPrompt}`,
-            row.videoMotionPrompt && `视频提示词：${row.videoMotionPrompt}`,
-            row.negativePrompt && `负面要求：${row.negativePrompt}`,
-        ].filter(Boolean).join("\n");
-        return [{ nodeId: inputId, type: "text", title: `${scriptNode.title} · 镜头 ${row.shotNumber}`, text, alwaysIncludeText: true }];
+        const target = nodes.find((node) => node.id === nodeId);
+        const mode = target ? getNodeGenerationMode(target) : "video";
+        const rowPrompt = (mode === "image" ? row.imageGenerationPrompt : row.videoMotionPrompt) || row.plotDescription;
+        // Materialized storyboard outputs already own a synchronized composer prompt.
+        if (connection.relation === "storyboard-output") return [];
+        return rowPrompt?.trim() ? [{ nodeId: inputId, type: "text", title: `${scriptNode.title} · 镜头 ${row.shotNumber}`, text: rowPrompt.trim(), alwaysIncludeText: true }] : [];
     });
 }
 
