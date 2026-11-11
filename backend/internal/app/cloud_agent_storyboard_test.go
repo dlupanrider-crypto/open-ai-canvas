@@ -173,7 +173,7 @@ func TestCloudAgentNodeCapabilityCardsExplainStoryboardTradeoffs(t *testing.T) {
 		byType[node["type"].(string)] = node
 	}
 	storyboard := byType["script"]
-	for _, nodeType := range []string{"text", "markdown", "image", "video", "audio", "frame", "script"} {
+	for _, nodeType := range []string{"text", "image", "video", "audio", "frame", "script"} {
 		node := byType[nodeType]
 		for _, key := range []string{"purpose", "goodFor", "notIdealFor", "tradeoffs"} {
 			if value, exists := node[key]; !exists || value == nil {
@@ -186,7 +186,7 @@ func TestCloudAgentNodeCapabilityCardsExplainStoryboardTradeoffs(t *testing.T) {
 			t.Fatalf("%s capability card lacks actions: %+v", nodeType, byType[nodeType])
 		}
 	}
-	if storyboard["purpose"] == byType["text"]["purpose"] || storyboard["purpose"] == byType["markdown"]["purpose"] {
+	if storyboard["purpose"] == byType["text"]["purpose"] {
 		t.Fatal("storyboard and lightweight nodes expose indistinguishable purposes")
 	}
 	videoGoodFor := strings.Join(byType["video"]["goodFor"].([]string), "\n")
@@ -306,8 +306,17 @@ func TestCloudAgentStoryboardEditPreservesRowsAndRenumbers(t *testing.T) {
 
 	apply := func(call cloudAgentCall) []map[string]any {
 		t.Helper()
-		if _, err := applyCloudAgentStoryboardMutation(s.repo, "user", canvas.ID, call, policy); err != nil {
+		recorder, recordedPreview := cloudAgentCaptureMutationPreview()
+		result, err := applyCloudAgentStoryboardMutation(s.repo, "user", canvas.ID, call, policy, recorder)
+		if err != nil {
 			t.Fatal(err)
+		}
+		resultMap := result.(map[string]any)
+		preview := resultMap["preview"].(cloudAgentApprovalPreview)
+		assertCloudAgentAppliedPreview(t, preview, preview.Items[0].Summary)
+		captured, ok := recordedPreview()
+		if !ok || captured.Description != preview.Description || captured.Status != preview.Status {
+			t.Fatalf("storyboard mutation event preview diverged from tool result: result=%+v recorded=%+v", preview, captured)
 		}
 		stored, err := s.repo.CanvasProjectForUser("user", canvas.ID)
 		if err != nil {
