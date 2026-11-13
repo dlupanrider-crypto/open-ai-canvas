@@ -102,6 +102,17 @@ describe("storyboard row video prompt assembly", () => {
         expect(synced.metadata?.generationSpec?.options.durationSeconds).toBe(10);
     });
 
+    test("a video workflow connected to a storyboard row receives the same assembled prompt as a video node", () => {
+        const row = createStoryboardRow(1, { id: "shot", videoMotionPrompt: "镜头推进", dialogue: "你好", audioEffects: "风声", durationSeconds: 8 });
+        const script = createCanvasNode(CanvasNodeType.Script, { x: 0, y: 0 }, { storyboard: { rows: [row], visibleColumns: [], referenceNodeIds: [] } });
+        const workflow = createCanvasNode(CanvasNodeType.Config, { x: 500, y: 0 }, { generationMode: "video", workflowProvider: "runninghub" });
+        const [updatedWorkflow] = attachNodeToStoryboardRow([script, workflow], { fromNodeId: script.id, toNodeId: workflow.id, fromHandleId: "row:shot" }).filter((node) => node.id === workflow.id);
+        expect(updatedWorkflow.metadata?.composerContent).toBe(storyboardRowVideoPrompt(row));
+        expect(nodeGenerationPrompt(updatedWorkflow)).toBe(storyboardRowVideoPrompt(row));
+        expect(updatedWorkflow.metadata?.workflowProvider).toBe("runninghub");
+        expect(updatedWorkflow.metadata?.seconds).toBe("8");
+    });
+
     test("storyboard row handle feeds structured shot text to non-media targets without polluting image or video nodes", () => {
         const row = createStoryboardRow(2, {
             id: "shot-2",

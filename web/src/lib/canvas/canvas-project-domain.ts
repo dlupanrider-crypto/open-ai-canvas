@@ -420,7 +420,7 @@ export function attachNodeToStoryboardRow(nodes: CanvasNodeData[], connection: P
     const videoComposerContent = row ? storyboardComposerContent(videoPrompt, storyboardRowReferenceNodeIds(scriptNode, row, nodes, [], false), nodes) : "";
 
     return nodes.map((node) => {
-        if (row && node.id === linkedNode.id && scriptNodeId === connection.fromNodeId && node.type === CanvasNodeType.Video) {
+        if (row && node.id === linkedNode.id && scriptNodeId === connection.fromNodeId && (node.type === CanvasNodeType.Video || (node.type === CanvasNodeType.Config && node.metadata?.generationMode === "video"))) {
             const synced = syncStoryboardVideoNode(node, {
                 ...node.metadata,
                 prompt: videoPrompt,
@@ -433,7 +433,7 @@ export function attachNodeToStoryboardRow(nodes: CanvasNodeData[], connection: P
                 videoEditOperation: node.metadata?.videoEditOperation || "text_to_video",
                 seconds: String(row.durationSeconds),
             });
-            return { ...synced, title: `镜头 ${row.shotNumber} · 视频` };
+            return node.type === CanvasNodeType.Video ? { ...synced, title: `镜头 ${row.shotNumber} · 视频` } : synced;
         }
         if (node.id !== scriptNodeId || node.type !== CanvasNodeType.Script) return node;
         const storyboard = node.metadata?.storyboard;
